@@ -9,7 +9,7 @@ Este projeto utiliza **técnicas de machine learning** para prever riscos na pro
 Além disso, aplica **clusterização (DBSCAN)** para identificar grupos ocultos e **modelos de regressão** para previsão de produtividade.
 
 ## 📂 Estrutura do Projeto
-
+```sh
 ├── reports/
     ├── data/
         ├── Herd Data 18-08-2024.xlsx # Conjunto de dados (Dairy Farm Dataset - Kaggle 2024)
@@ -18,8 +18,7 @@ Além disso, aplica **clusterização (DBSCAN)** para identificar grupos ocultos
 ├── requirements.txt     # Dependências do projeto
 ├── cow_metrics.py  # Script de execução
 └── README.md            # Este arquivo
-
-````
+```
 
 ## ⚙️ Instalação
 
