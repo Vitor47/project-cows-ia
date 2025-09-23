@@ -42,18 +42,18 @@ venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 ```
 
+### 3. Instale as dependências de desenvolvimento
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ## ▶️ Execução
 
 ### Rodar o pipeline completo
 
 ```bash
 python cow_metrics.py
-```
-
-### Executar notebooks
-
-```bash
-jupyter notebook notebooks/
 ```
 
 ## 📊 Resultados
