@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import shap
 from lime.lime_tabular import LimeTabularExplainer
 from sklearn.cluster import DBSCAN
 from sklearn.compose import ColumnTransformer
@@ -262,42 +263,46 @@ plt.show()
 # ======================================
 # 9) SHAP - interpretabilidade
 # ======================================
+# Escolher o índice da vaca que queremos analisar
+i0 = 0
+x0 = X_test.iloc[[i0]]
+pred_class = rf_model.predict(x0)[0]
+pred_proba = rf_model.predict_proba(x0)[0, 1]
+
+print(f"🐄 Vaca {i0}:")
+print("Classe prevista:", "Normal" if pred_class == 0 else "Risco")
+print("Probabilidade de baixa lactação:", round(pred_proba, 3))
+
 X_train_transformed = preprocessor.fit_transform(X_train)
 X_test_transformed = preprocessor.transform(X_test)
 
-# Features numéricas
-numeric_features_transformed = numeric_features
+explainer = shap.Explainer(rf, X_train_transformed)
+shap_values = explainer(X_test_transformed)
 
-# Features categóricas após one-hot encoding
-categorical_features_transformed = (
-    preprocessor.named_transformers_["cat"]
+# valores para a instância i0
+ohe = (
+    rf_model.named_steps["preprocessor"]
+    .named_transformers_["cat"]
     .named_steps["onehot"]
-    .get_feature_names_out(categorical_features)
+)
+cat_names = ohe.get_feature_names_out(categorical_features)
+all_features = numeric_features + list(cat_names)
+
+shap_vals_instance = shap_values[i0].values[:, 1]
+shap_series = pd.Series(shap_vals_instance, index=all_features)
+shap_series = shap_series.reindex(
+    shap_series.abs().sort_values(ascending=False).index
 )
 
-# Combinar todas
-all_features_transformed = list(numeric_features_transformed) + list(
-    categorical_features_transformed
-)
+print("\n🔎 Importância local (SHAP):")
+print(shap_series.head(6))
 
-explainer_lime = LimeTabularExplainer(
-    X_train_transformed,
-    feature_names=all_features_transformed,
-    class_names=["Normal", "Risco"],
-    discretize_continuous=True,
-    random_state=42,
-)
-
-i = 0  # índice da vaca que você quer explicar
-exp = explainer_lime.explain_instance(
-    X_test_transformed[i],
-    rf_model.named_steps["classifier"].predict_proba,
-    num_features=10,  # Top 10 features mais importantes
-)
-
-print("\nTop features LIME para a amostra:")
-for feat, weight in exp.as_list():
-    print(f"{feat}: {weight:.3f}")
+shap_series.head(6).plot(kind="barh", figsize=(6, 4))
+plt.title(f"Explicação local (SHAP) - Vaca {i0}")
+plt.xlabel("Valor SHAP")
+plt.gca().invert_yaxis()
+plt.tight_layout()
+plt.show()
 
 # ======================================
 # 11) PCA + DBSCAN
@@ -309,6 +314,14 @@ df_ml_filtered = df_ml[
 ].copy()
 print(f"Total de vacas após filtro: {len(df_ml_filtered)}")
 
+# Categorias de idade (em anos)
+bins = [2, 4, 6, 8, 10, 15]
+labels = ["2-4", "4-6", "6-8", "8-10", "10+"]
+
+df_ml_filtered["Age_Group"] = pd.cut(
+    df_ml_filtered["Age Years"], bins=bins, labels=labels, right=False
+)
+
 X_filtered = df_ml_filtered.drop(columns=["target_low_milk"])
 X_scaled = preprocessor.fit_transform(X_filtered)
 
@@ -316,6 +329,7 @@ pca = PCA(n_components=2, random_state=42)
 X_pca = pca.fit_transform(X_scaled)
 
 df_plot = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+df_plot["Age_Group"] = df_ml_filtered["Age_Group"].values
 df_plot["target_low_milk"] = df_ml_filtered["target_low_milk"].values
 
 # DBSCAN
@@ -365,6 +379,43 @@ else:
 outliers = df_ml_filtered.iloc[df_plot[df_plot["Cluster"] == -1].index]
 print(f"\n🚨 Outliers detectados: {len(outliers)}")
 print(outliers.head())
+
+
+print(
+    df_plot.groupby(["Cluster_Label", "Age_Group"])
+    .size()
+    .unstack(fill_value=0)
+)
+plt.figure(figsize=(10, 6))
+sns.countplot(
+    data=df_plot[df_plot["Cluster"] != -1],  # ignora outliers
+    x="Age_Group",
+    hue="Cluster_Label",
+)
+plt.title("Distribuição de Faixas Etárias por Cluster DBSCAN")
+plt.xlabel("Faixa Etária (anos)")
+plt.ylabel("Nº de vacas")
+plt.legend(title="Cluster")
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(10, 7))
+sns.scatterplot(
+    x="PC1",
+    y="PC2",
+    data=df_plot,
+    hue="Age_Group",
+    style=df_plot["target_low_milk"].map({0: "Normal", 1: "Risco"}),
+    palette="viridis",
+    alpha=0.7,
+    s=80,
+)
+plt.title("Clusters DBSCAN (PCA 2D) com Faixas Etárias")
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.legend(title="Faixa Etária", bbox_to_anchor=(1.05, 1), loc="upper left")
+plt.tight_layout()
+plt.show()
 
 # Estabilidade DBSCAN
 ari_scores, ari_mean = dbscan_stability(X_pca, eps_values=[0.8, 1.0, 1.2])
